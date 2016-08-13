@@ -40,7 +40,7 @@ type Location struct {
 
 }
 
-func GetJson(Url string) (Loan, error) {
+func GetLoan(Url string) (Loan, error) {
 
 	var l Loan
 	resp, err := http.Get(Url + ".json")
@@ -67,19 +67,22 @@ func GetRawJson(Url string) {
 	if err != nil {
 		fmt.Println(err)
 	}
-	fmt.Println(dat)
+	for k, v := range dat {
+		fmt.Println(k)
+		fmt.Println(v)
+	}
 }
 
 func main() {
 	urlBase := "http://api.kivaws.org/v1"
 	url := "/loans/newest"
 
-	GetRawJson(urlBase + url)
+	//GetRawJson(urlBase + url)
 
-	//js, err := GetJson(urlBase + url)
-	//if err != nil {
-	//	log.Fatal(err)
-	//}
-	//fmt.Println(js)
+	loan, err := GetLoan(urlBase + url)
+	if err != nil {
+		fmt.Println(err)
+	}
+	fmt.Println(loan.name)
 }
 
