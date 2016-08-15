@@ -5,6 +5,8 @@ import (
 	"encoding/json"
 	"net/http"
 	"io/ioutil"
+	"strconv"
+	"errors"
 )
 
 type Loan struct {
@@ -41,7 +43,6 @@ type LocationData struct {
 	Country string `json: "country"`
 	Geo map[string]string `json: "geo"`
 	Town string `json: "town"`
-
 }
 
 type PagingData struct {
@@ -51,10 +52,13 @@ type PagingData struct {
 	Pages int	`json: "pages"`
 }
 
-type LoansResponse struct {
-	Paging PagingData `json: "paging"`
-	//Loans []Loan `json: "loans"`
-	Loans []Loan `json: "loans"`
+type PagedLoansResponse struct {
+    Paging PagingData `json: "paging"`
+    Loans []Loan `json: "loans"`
+}
+
+type UnpagedLoansResponse struct {
+    Loans []Loan `json: "loans"`
 }
 
 func GetResponse(url string) (*http.Response, error) {
@@ -66,17 +70,33 @@ func GetResponse(url string) (*http.Response, error) {
 	return r, nil
 }
 
-func GetLoans() ([]Loan, error) {
+func GetLoansById(ids ...int) ([]Loan, error) {
+// not sure whether requesting 50 loan IDs will return paged results
 
-	url := "/loans/newest"
-	r, err := GetResponse(url)
+	var baseUrl = "/loans/"
+	var url string
+	var err error
+	var loans []Loan
+	if len(ids) == 0 {
+		return loans, errors.New("No Loan Ids passed")
+	}
+	for i, v := range ids {
+		if i == 0 {
+			char := strconv.Itoa(v)
+			url += char
+		} else {
+			char := strconv.Itoa(v)
+			url += "," + char
+		}
+	}
+	r, err := GetResponse(baseUrl + url)
 	if err != nil {
 		return nil, err
 	}
-	var lr LoansResponse
+	var lr UnpagedLoansResponse
 	err = json.NewDecoder(r.Body).Decode(&lr)
 	if err != nil {
-		fmt.Println("you done fucked there", err)
+		fmt.Println("error decoding json", err)
 		return nil, err
 	}
 	return lr.Loans, nil
@@ -106,13 +126,13 @@ func PrintRawLoansJson() {
 func main() {
 	//PrintRawLoansJson()
 
-	loans, _ := GetLoans()
-	//if err != nil {
-	//	fmt.Println(err)
-	//}
+	loans, err := GetLoansById(1132720,1128815)
+	if err != nil {
+		fmt.Println(err)
+	}
 	fmt.Println("loans ", loans)
-	//for k, v := range loans {
-	//	fmt.Println(k,v)
-	//}
+	for k, v := range loans {
+		fmt.Println(k,v)
+	}
 }
 
