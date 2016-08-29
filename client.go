@@ -38,3 +38,5 @@ func New(config *Config) *Client {
     doer: &http.Client{},
   }
 }
+
+func (*Client) do(method string, path string)
