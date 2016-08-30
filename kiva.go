@@ -2,11 +2,10 @@ package main
 
 import (
 	"encoding/json"
-	"errors"
 	"fmt"
 	"io/ioutil"
 	"net/http"
-	"strconv"
+	"github.com/rumdrums/go-kiva/kiva"
 )
 
 type Loan struct {
@@ -74,37 +73,7 @@ func GetResponse(url string) (*http.Response, error) {
 	return r, nil
 }
 
-func GetLoansById(ids ...int) ([]Loan, error) {
-	// not sure whether requesting 50 loan IDs will return paged results
 
-	var baseUrl = "/loans/"
-	var url string
-	var err error
-	var loans []Loan
-	if len(ids) == 0 {
-		return loans, errors.New("No Loan Ids passed")
-	}
-	for i, v := range ids {
-		if i == 0 {
-			char := strconv.Itoa(v)
-			url += char
-		} else {
-			char := strconv.Itoa(v)
-			url += "," + char
-		}
-	}
-	r, err := GetResponse(baseUrl + url)
-	if err != nil {
-		return nil, err
-	}
-	var lr UnpagedLoansResponse
-	err = json.NewDecoder(r.Body).Decode(&lr)
-	if err != nil {
-		fmt.Println("error decoding json", err)
-		return nil, err
-	}
-	return lr.Loans, nil
-}
 
 func PrintRawLoansJson() {
 
@@ -130,6 +99,7 @@ func PrintRawLoansJson() {
 func main() {
 	//PrintRawLoansJson()
 
+ 	cli := Client()
 	loans, err := GetLoansById(1132720, 1128815)
 	if err != nil {
 		fmt.Println(err)
