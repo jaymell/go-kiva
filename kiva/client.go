@@ -18,11 +18,11 @@ type Loan struct {
   Location               LocationData        `json: "Location"`
   PostedDate             int                 `json: "posted_date"`
   Activity               string              `json: "activity"`
-  Id                     int                 `json: "id"`
+  ID                     int                 `json: "id"`
   Use                    string              `json: "use"`
   Desc                   Description         `json: "description"`
   FundedAmount           int                 `json: "funded_amount"`
-  PartnerId              int                 `json: "partner_id"`
+  PartnerID              int                 `json: "partner_id"`
   Image                  Image               `json: "image"`
   BorrowerCount          int                 `json: "borrower_count"`
   LoanAmount             int                 `json: "loan_amount"`
@@ -34,9 +34,17 @@ type Loan struct {
   BasketAmount           int                 `json: "basket_amount"`
 }
 
+type Lender struct {
+  ID int `json: "lender_id"`
+  Name string `json: "name"`
+  Whereabouts string `json: "whereabots"`
+  CountryCode string `json: "country_code"`
+  Image
+}
+
 type Image struct {
-  TemplateId int `json: "template_id"`
-  Id         int `json: "id"`
+  TemplateID int `json: "template_id"`
+  ID         int `json: "id"`
 }
 
 type Description struct {
@@ -56,14 +64,6 @@ type PagingData struct {
   Pages    int `json: "pages"`
 }
 
-type PagedLoansResponse struct {
-  Paging PagingData `json: "paging"`
-  Loans  []Loan     `json: "loans"`
-}
-
-type UnpagedLoansResponse struct {
-  Loans []Loan `json: "loans"`
-}
 
 type doer interface {
   Do(*http.Request) (*http.Response, error)
@@ -130,15 +130,23 @@ func (c *Client) do(method string, urlpath string, query url.Values, body io.Rea
   return nil
 }
 
-func (c *Client) GetLoansById(ids ...int) ([]Loan, error) {
+type PagedLoansResponse struct {
+  Paging PagingData `json: "paging"`
+  Loans  []Loan     `json: "loans"`
+}
+
+type UnpagedLoansResponse struct {
+  Loans []Loan `json: "loans"`
+}
+
+func (c *Client) GetLoansByID(ids ...int) ([]Loan, error) {
   // not sure whether requesting 50 loan IDs will return paged results
 
   var baseUrl = "/v1/loans/"
   var url string
-  var err error
   var loans []Loan
   if len(ids) == 0 {
-    return loans, errors.New("No Loan Ids passed")
+    return loans, errors.New("No Loan IDs passed")
   }
   for i, v := range ids {
     if i == 0 {
@@ -151,7 +159,7 @@ func (c *Client) GetLoansById(ids ...int) ([]Loan, error) {
   }
   
   var lr UnpagedLoansResponse
-  err = c.do("GET", baseUrl + url, nil, nil, &lr)
+  err := c.do("GET", baseUrl + url, nil, nil, &lr)
   if err != nil {
     return nil, err
   }
@@ -159,3 +167,26 @@ func (c *Client) GetLoansById(ids ...int) ([]Loan, error) {
   return lr.Loans, nil
 }
 
+func (c *Client) GetLoanJournalEntries(id int) {
+  // not sure this is even implemented... they don't seem
+  // to publish a schema for it either
+  //baseUrl := fmt.Sprintf("/v1/loans/%d/journal_entries",id)
+}
+
+type PagedLendersResponse struct {
+  Paging PagingData `json: "paging"`
+  Lenders []Lender `json: "lenders"`
+}
+
+func (c *Client) GetLoanLenders(id int) ([]Lender, error) {
+
+  baseUrl := fmt.Sprintf("/v1/loans/%d/lenders",id)
+  var lr PagedLendersResponse
+
+  err := c.do("GET", baseUrl, nil, nil, &lr)
+  if err != nil {
+    return nil, err
+  }
+
+  return lr.Lenders, nil
+}
