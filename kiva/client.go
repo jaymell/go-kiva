@@ -42,6 +42,10 @@ type Lender struct {
   Image
 }
 
+type Repayment struct {
+ // can't find data on this 
+}
+
 type Image struct {
   TemplateID int `json: "template_id"`
   ID         int `json: "id"`
@@ -139,16 +143,16 @@ type UnpagedLoansResponse struct {
   Loans []Loan `json: "loans"`
 }
 
-func (c *Client) GetLoansByID(ids ...int) ([]Loan, error) {
+func (c *Client) GetLoansByID(loanIDs ...int) ([]Loan, error) {
   // not sure whether requesting 50 loan IDs will return paged results
 
   var baseUrl = "/v1/loans/"
   var url string
   var loans []Loan
-  if len(ids) == 0 {
+  if len(loanIDs) == 0 {
     return loans, errors.New("No Loan IDs passed")
   }
-  for i, v := range ids {
+  for i, v := range loanIDs {
     if i == 0 {
       char := strconv.Itoa(v)
       url += char
@@ -167,10 +171,10 @@ func (c *Client) GetLoansByID(ids ...int) ([]Loan, error) {
   return lr.Loans, nil
 }
 
-func (c *Client) GetLoanJournalEntries(id int) {
+func (c *Client) GetLoanJournalEntries(loanID int) {
   // not sure this is even implemented... they don't seem
   // to publish a schema for it either
-  //baseUrl := fmt.Sprintf("/v1/loans/%d/journal_entries",id)
+  //baseUrl := fmt.Sprintf("/v1/loans/%d/journal_entries", loanID)
 }
 
 type PagedLendersResponse struct {
@@ -178,15 +182,36 @@ type PagedLendersResponse struct {
   Lenders []Lender `json: "lenders"`
 }
 
-func (c *Client) GetLoanLenders(id int) ([]Lender, error) {
+func (c *Client) GetLoanLenders(loanID int) ([]Lender, error) {
 
-  baseUrl := fmt.Sprintf("/v1/loans/%d/lenders",id)
+  baseUrl := fmt.Sprintf("/v1/loans/%d/lenders", loanID)
   var lr PagedLendersResponse
 
   err := c.do("GET", baseUrl, nil, nil, &lr)
   if err != nil {
     return nil, err
   }
-
+  // FIXME: need to return ALL pages
   return lr.Lenders, nil
+}
+
+// type PagedLoanRepaymentsResponse struct {
+//   Paging PagingData `json: "paging"`
+
+// }
+
+// func (c *Client) GetLoanRepayments(loanID int) {
+//  // can't find data on this
+// }
+
+func (c *Client) GetSimilarLoans(loanID int) ([]Loan, error) {
+  baseUrl := fmt.Sprintf("/v1/loans/%d/similar", loanID)
+  var lr UnpagedLoansResponse
+
+  err := c.do("GET", baseUrl, nil, nil, &lr)
+  if err != nil {
+    return nil, err
+  }
+
+  return lr.Loans, nil
 }

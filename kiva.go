@@ -42,6 +42,14 @@ func main() {
       for _, w := range lenders {
       	fmt.Println("lender: ", w)
       }
+      similar, err := cli.GetSimilarLoans(v)
+      if err != nil {
+        fmt.Println(err)
+        break
+      } 
+      for _, w := range similar {
+        fmt.Println("similar: ", w)
+      }
     }
 }
 
