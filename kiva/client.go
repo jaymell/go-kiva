@@ -34,7 +34,23 @@ type Loan struct {
 }
 
 type Team struct {
-	Category string `json: "cateogry"`
+	Category string `json: "category"`
+	Descrption string `json: "description"`
+	ID 	int `json: "id"`
+	Image Image `json: "image"`
+	LoanBecause string `json: "loan_because"`
+	LoanCount int `json: "loan_count"`
+	LoanedAmount int `json: "loaned_amount"`
+	MemberCount int `json: "member_count"`
+	MembershipType int `json: "membership_type"`
+	Name 	string `json: "name"`
+	ShortName string `json: "short_name"`
+	// FIXME: string for now -- example: 2013-11-03T13:27:16Z
+	TeamSince string `json: "team_since"`
+	// FIXME: this could probably be url type:
+	WebsiteURL string `json: "website_url"`
+	Whereabouts string `json: "whereabouts"`
+
 }
 
 type Lender struct {
