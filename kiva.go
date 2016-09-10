@@ -34,6 +34,11 @@ func main() {
 	}
 
 	for _, v := range loanIDs {
+
+		teams, err := cli.GetLoanTeams(v)
+		for _, w := range teams {
+			fmt.Println("team: ", w)
+		}
 		lenders, err := cli.GetLoanLenders(v)
 		if err != nil {
 			fmt.Println(err)

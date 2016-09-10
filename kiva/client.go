@@ -34,23 +34,22 @@ type Loan struct {
 }
 
 type Team struct {
-	Category string `json: "category"`
-	Descrption string `json: "description"`
-	ID 	int `json: "id"`
-	Image Image `json: "image"`
-	LoanBecause string `json: "loan_because"`
-	LoanCount int `json: "loan_count"`
-	LoanedAmount int `json: "loaned_amount"`
-	MemberCount int `json: "member_count"`
-	MembershipType int `json: "membership_type"`
-	Name 	string `json: "name"`
-	ShortName string `json: "short_name"`
+	Category       string `json: "category"`
+	Descrption     string `json: "description"`
+	ID             int    `json: "id"`
+	Image          Image  `json: "image"`
+	LoanBecause    string `json: "loan_because"`
+	LoanCount      int    `json: "loan_count"`
+	LoanedAmount   int    `json: "loaned_amount"`
+	MemberCount    int    `json: "member_count"`
+	MembershipType int    `json: "membership_type"`
+	Name           string `json: "name"`
+	ShortName      string `json: "short_name"`
 	// FIXME: string for now -- example: 2013-11-03T13:27:16Z
 	TeamSince string `json: "team_since"`
 	// FIXME: this could probably be url type:
-	WebsiteURL string `json: "website_url"`
+	WebsiteURL  string `json: "website_url"`
 	Whereabouts string `json: "whereabouts"`
-
 }
 
 type Lender struct {
@@ -234,7 +233,39 @@ func (c *Client) GetSimilarLoans(loanID int) ([]Loan, error) {
 	return lr.Loans, nil
 }
 
+type PagedLoanTeamsResponse struct {
+	Paging PagingData `json: "paging"`
+	Teams []Team `json: "teams"`
+}
+
 // top-level keys: [u'paging', u'teams']
 // 'teams'[0] keys: [u'category', u'membership_type', u'name', u'member_count', u'image', u'loaned_amount', u'whereabouts', u'loan_because', u'team_since', u'loan_count', u'shortname', u'id', u'website_url', u'description']
 func (c *Client) GetLoanTeams(loanID int) ([]Team, error) {
+	baseUrl := fmt.Sprintf("/v1/loans/%d/teams", loanID)
+	var pr PagedLoanTeamsResponse
+
+	numPages := 1 // set initial value of number of pages to iterate through
+	err := c.do("GET", baseUrl, nil, nil, &pr)
+	if err != nil {
+		return nil, err
+	}
+
+    if pr.Paging.Pages < 2 {
+    	return pr.Teams, nil
+    }
+
+	teams := make([]Team, pr.Paging.Total)
+	query := url.Values{}
+
+	for i:=2; i <= numPages; i++ {
+     	query.Set("page", strconv.Itoa(i)) 
+		err := c.do("GET", baseUrl, query, nil, &pr)
+		if err != nil {
+			return nil, err
+		}
+		numPages = pr.Paging.Pages // update numPages based on subsequent responses
+		copy(teams, pr.Teams)
+	}
+
+	return teams, nil
 }
