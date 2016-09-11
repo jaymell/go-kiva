@@ -93,6 +93,7 @@ type doer interface {
 type Client struct {
 	baseURL url.URL
 	doer    doer
+	ApplicationId string
 }
 
 type Config struct {
@@ -163,7 +164,7 @@ type UnpagedLoansResponse struct {
 func (c *Client) GetLoansByID(loanIDs ...int) ([]Loan, error) {
 	// not sure whether requesting 50 loan IDs will return paged results
 
-	var baseUrl = "/v1/loans/"
+	var baseUrl = "/v1/loans"
 	var url string
 	var loans []Loan
 	if len(loanIDs) == 0 {
@@ -269,3 +270,5 @@ func (c *Client) GetLoanTeams(loanID int) ([]Team, error) {
 
 	return teams, nil
 }
+
+func (c *Client) GetNewestLoans()

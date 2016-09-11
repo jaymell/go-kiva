@@ -39,14 +39,17 @@ func main() {
 		for _, w := range teams {
 			fmt.Println("team: ", w)
 		}
+
 		lenders, err := cli.GetLoanLenders(v)
 		if err != nil {
 			fmt.Println(err)
 			break
 		}
+
 		for _, w := range lenders {
 			fmt.Println("lender: ", w)
 		}
+		
 		similar, err := cli.GetSimilarLoans(v)
 		if err != nil {
 			fmt.Println(err)
