@@ -239,8 +239,44 @@ type PagedLoanTeamsResponse struct {
 	Teams []Team `json: "teams"`
 }
 
-// top-level keys: [u'paging', u'teams']
-// 'teams'[0] keys: [u'category', u'membership_type', u'name', u'member_count', u'image', u'loaned_amount', u'whereabouts', u'loan_because', u'team_since', u'loan_count', u'shortname', u'id', u'website_url', u'description']
+// FIXME: a lot of common code 
+// for paged responses can be factored
+// FIXME: be able to pass options
+func (c *Client) GetNewestLoans() ([]Loan, error) {
+  baseUrl := "/v1/loans/newest"
+  var pr PagedLoanResponse
+
+	numPages := 1 // set initial value of number of pages to iterate through
+	err := c.do("GET", baseUrl, nil, nil, &pr)
+	if err != nil {
+		return nil, err
+	}
+
+    if pr.Paging.Pages < 2 {
+    	return pr.Loans, nil
+    }
+
+	loans := make([]Loan, pr.Paging.Total)
+	copy(loans, pr.Loans)
+	query := url.Values{}
+
+	for i:=2; i <= numPages; i++ {
+     	query.Set("page", strconv.Itoa(i)) 
+		err := c.do("GET", baseUrl, query, nil, &pr)
+		if err != nil {
+			return nil, err
+		}
+		numPages = pr.Paging.Pages // update numPages based on subsequent responses
+		copy(loans, pr.Loans)
+	}
+
+	return loans, nil
+}
+
+
+// FIXME: a lot of common code 
+// for paged responses can be factored
+// FIXME: be able to pass options
 func (c *Client) GetLoanTeams(loanID int) ([]Team, error) {
 	baseUrl := fmt.Sprintf("/v1/loans/%d/teams", loanID)
 	var pr PagedLoanTeamsResponse
@@ -256,6 +292,7 @@ func (c *Client) GetLoanTeams(loanID int) ([]Team, error) {
     }
 
 	teams := make([]Team, pr.Paging.Total)
+	copy(teams, pr.Teams)
 	query := url.Values{}
 
 	for i:=2; i <= numPages; i++ {
@@ -269,10 +306,5 @@ func (c *Client) GetLoanTeams(loanID int) ([]Team, error) {
 	}
 
 	return teams, nil
-}
-
-func (c *Client) GetNewestLoans() ([]Loan, error) {
-  baseUrl := "/v1/loans/newest"
-  var pr PagedLoanResponse
 }
 

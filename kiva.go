@@ -2,7 +2,7 @@ package main
 
 import (
 	"fmt"
-	"github.com/rumdrums/go-kiva/kiva"
+	"github.com/jaymell/go-kiva/kiva"
 	"os"
 	"strconv"
 )
@@ -58,5 +58,10 @@ func main() {
 		for _, w := range similar {
 			fmt.Println("similar: ", w)
 		}
+	}
+	newLoans, err := cli.GetNewestLoans()
+	fmt.Println("printing new loans.....")
+	for _, v := range newLoans {
+		fmt.Println(v)
 	}
 }
