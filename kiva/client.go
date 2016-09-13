@@ -152,12 +152,12 @@ func (c *Client) do(method string, urlpath string, query url.Values, body io.Rea
 	return nil
 }
 
-type PagedLoansResponse struct {
+type PagedLoanResponse struct {
 	Paging PagingData `json: "paging"`
 	Loans  []Loan     `json: "loans"`
 }
 
-type UnpagedLoansResponse struct {
+type UnpagedLoanResponse struct {
 	Loans []Loan `json: "loans"`
 }
 
@@ -180,7 +180,7 @@ func (c *Client) GetLoansByID(loanIDs ...int) ([]Loan, error) {
 		}
 	}
 
-	var lr UnpagedLoansResponse
+	var lr UnpagedLoanResponse
 	err := c.do("GET", baseUrl+url, nil, nil, &lr)
 	if err != nil {
 		return nil, err
@@ -224,7 +224,7 @@ func (c *Client) GetLoanLenders(loanID int) ([]Lender, error) {
 
 func (c *Client) GetSimilarLoans(loanID int) ([]Loan, error) {
 	baseUrl := fmt.Sprintf("/v1/loans/%d/similar", loanID)
-	var lr UnpagedLoansResponse
+	var lr UnpagedLoanResponse
 
 	err := c.do("GET", baseUrl, nil, nil, &lr)
 	if err != nil {
@@ -271,4 +271,8 @@ func (c *Client) GetLoanTeams(loanID int) ([]Team, error) {
 	return teams, nil
 }
 
-func (c *Client) GetNewestLoans()
+func (c *Client) GetNewestLoans() ([]Loan, error) {
+  baseUrl := "/v1/loans/newest"
+  var pr PagedLoanResponse
+}
+
