@@ -5,10 +5,13 @@ import (
 	"github.com/jaymell/go-kiva/kiva"
 	"os"
 	"strconv"
+	"log"
 )
 
 func Client() *kiva.Client {
-	var clientConfig kiva.Config
+	clientConfig := kiva.Config{
+		AppID: "com.jamesntina.go-kiva",
+	}
 	return kiva.New(&clientConfig)
 }
 
@@ -23,43 +26,47 @@ func main() {
 		}
 		//loanIDs[i], _ = strconv.Atoi(v)
 	}
-	loans, err := cli.GetLoansByID(loanIDs...)
-	if err != nil {
-		fmt.Println(err)
-	}
-	fmt.Println("loans ", loans)
+	// loans, err := cli.GetLoansByID(loanIDs...)
+	// if err != nil {
+	// 	fmt.Println(err)
+	// }
+	// fmt.Println("loans ", loans)
 
-	for k, v := range loans {
-		fmt.Println(k, v)
-	}
+	// for k, v := range loans {
+	// 	fmt.Println(k, v)
+	// }
 
-	for _, v := range loanIDs {
+	// for _, v := range loanIDs {
 
-		teams, err := cli.GetLoanTeams(v)
-		for _, w := range teams {
-			fmt.Println("team: ", w)
-		}
+	// 	teams, err := cli.GetLoanTeams(v)
+	// 	for _, w := range teams {
+	// 		fmt.Println("team: ", w)
+	// 	}
 
-		lenders, err := cli.GetLoanLenders(v)
-		if err != nil {
-			fmt.Println(err)
-			break
-		}
+	// 	lenders, err := cli.GetLoanLenders(v)
+	// 	if err != nil {
+	// 		fmt.Println(err)
+	// 		break
+	// 	}
 
-		for _, w := range lenders {
-			fmt.Println("lender: ", w)
-		}
+	// 	for _, w := range lenders {
+	// 		fmt.Println("lender: ", w)
+	// 	}
 		
-		similar, err := cli.GetSimilarLoans(v)
-		if err != nil {
-			fmt.Println(err)
-			break
-		}
-		for _, w := range similar {
-			fmt.Println("similar: ", w)
-		}
-	}
+	// 	similar, err := cli.GetSimilarLoans(v)
+	// 	if err != nil {
+	// 		fmt.Println(err)
+	// 		break
+	// 	}
+	// 	for _, w := range similar {
+	// 		fmt.Println("similar: ", w)
+	// 	}
+	// }
 	newLoans, err := cli.GetNewestLoans()
+	if err != nil {
+		log.Fatal(err)
+
+	}
 	fmt.Println("printing new loans.....")
 	for _, v := range newLoans {
 		fmt.Println(v)

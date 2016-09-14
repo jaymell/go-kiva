@@ -91,35 +91,44 @@ type doer interface {
 }
 
 type Client struct {
-	baseURL url.URL
+	baseURL *url.URL
 	doer    doer
-	ApplicationId string
+	appID string
 }
 
 type Config struct {
 	BaseURL string
+	AppID string
+}
+
+func DefaultConfig() *Config {
+	return &Config{
+		BaseURL: "http://api.kivaws.org",
+		AppID: "",		
+	}
 }
 
 func New(config *Config) *Client {
-	if config == nil || config.BaseURL == "" {
-		return &Client{
-			baseURL: url.URL{
-				Scheme: "http",
-				Host:   "api.kivaws.org",
-			},
-			doer: &http.Client{
-				Timeout: time.Second * 10,
-			},
-		}
-	}
+	defaultConfig := DefaultConfig()
+	if config == nil {
+		config = defaultConfig
+	} 
 
-	baseURL, err := url.Parse(config.BaseURL)
+    if config.BaseURL == "" {
+		config.BaseURL = defaultConfig.BaseURL
+    }
+    
+    baseURL, err := url.Parse(config.BaseURL)
 	if err != nil {
 		panic(fmt.Sprintf("cannot parse base URL: %q (%v)", config.BaseURL, err))
 	}
+
 	return &Client{
-		baseURL: *baseURL,
-		doer:    &http.Client{},
+		baseURL: baseURL,
+		doer:    &http.Client{
+				Timeout: time.Second * 10,
+			},
+		appID: config.AppID,
 	}
 }
 
@@ -141,6 +150,15 @@ func (c *Client) raw(method string, urlpath string, query url.Values, body io.Re
 // decode json from http response and return as interface understood
 // by caller
 func (c *Client) do(method string, urlpath string, query url.Values, body io.Reader, v interface{}) error {
+	// add application id if defined:
+	newQuery := url.Values{}
+	if c.appID != "" {
+		if query == nil {
+			query = newQuery
+		}
+		query.Set("app_id", c.appID)		
+	}
+
 	resp, err := c.raw(method, urlpath, query, body)
 	if err != nil {
 		return fmt.Errorf("error making request: %s", err)
@@ -239,44 +257,11 @@ type PagedLoanTeamsResponse struct {
 	Teams []Team `json: "teams"`
 }
 
-// FIXME: a lot of common code 
-// for paged responses can be factored
-// FIXME: be able to pass options
-func (c *Client) GetNewestLoans() ([]Loan, error) {
-  baseUrl := "/v1/loans/newest"
-  var pr PagedLoanResponse
-
-	numPages := 1 // set initial value of number of pages to iterate through
-	err := c.do("GET", baseUrl, nil, nil, &pr)
-	if err != nil {
-		return nil, err
-	}
-
-    if pr.Paging.Pages < 2 {
-    	return pr.Loans, nil
-    }
-
-	loans := make([]Loan, pr.Paging.Total)
-	copy(loans, pr.Loans)
-	query := url.Values{}
-
-	for i:=2; i <= numPages; i++ {
-     	query.Set("page", strconv.Itoa(i)) 
-		err := c.do("GET", baseUrl, query, nil, &pr)
-		if err != nil {
-			return nil, err
-		}
-		numPages = pr.Paging.Pages // update numPages based on subsequent responses
-		copy(loans, pr.Loans)
-	}
-
-	return loans, nil
-}
-
 
 // FIXME: a lot of common code 
 // for paged responses can be factored
 // FIXME: be able to pass options
+// FIXME: don't just return all pages at once
 func (c *Client) GetLoanTeams(loanID int) ([]Team, error) {
 	baseUrl := fmt.Sprintf("/v1/loans/%d/teams", loanID)
 	var pr PagedLoanTeamsResponse
@@ -290,6 +275,7 @@ func (c *Client) GetLoanTeams(loanID int) ([]Team, error) {
     if pr.Paging.Pages < 2 {
     	return pr.Teams, nil
     }
+    numPages = pr.Paging.Pages
 
 	teams := make([]Team, pr.Paging.Total)
 	copy(teams, pr.Teams)
@@ -306,5 +292,41 @@ func (c *Client) GetLoanTeams(loanID int) ([]Team, error) {
 	}
 
 	return teams, nil
+}
+
+// FIXME: a lot of common code 
+// for paged responses can be factored
+// FIXME: be able to pass options
+// FIXME: don't just return all pages at once
+func (c *Client) GetNewestLoans() ([]Loan, error) {
+  baseUrl := "/v1/loans/newest"
+  var pr PagedLoanResponse
+
+	//numPages := 1 // set initial value of number of pages to iterate through
+	err := c.do("GET", baseUrl, nil, nil, &pr)
+	if err != nil {
+		return nil, err
+	}
+
+    if pr.Paging.Pages < 2 {
+    	return pr.Loans, nil
+    }
+    //numPages = pr.Paging.Pages
+    
+	loans := make([]Loan, pr.Paging.Total)
+	copy(loans, pr.Loans)
+	query := url.Values{}
+
+	for i:=2; i <= 10; i++ {
+     	query.Set("page", strconv.Itoa(i)) 
+		err := c.do("GET", baseUrl, query, nil, &pr)
+		if err != nil {
+			return nil, err
+		}
+		//numPages = pr.Paging.Pages // update numPages based on subsequent responses
+		copy(loans, pr.Loans)
+	}
+
+	return loans, nil
 }
 
