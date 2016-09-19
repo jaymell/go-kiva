@@ -134,12 +134,12 @@ func New(config *Config) *Client {
 
 // make the actual http request and return the http response
 func (c *Client) raw(method string, urlpath string, query url.Values, body io.Reader) (*http.Response, error) {
-	url := c.baseURL
+	url := *c.baseURL
 	// FIXME: ".json" should probably be an option:
 	urlpath += ".json"
-	url.Path = path.Join(c.baseURL.Path, urlpath)
-	fmt.Println(url.String())
+	url.Path = path.Join(url.Path, urlpath)
 	url.RawQuery = query.Encode()
+	fmt.Println(url.String())
 	req, err := http.NewRequest(method, url.String(), body)
 	if err != nil {
 		return nil, err
@@ -182,7 +182,7 @@ type UnpagedLoanResponse struct {
 func (c *Client) GetLoansByID(loanIDs ...int) ([]Loan, error) {
 	// not sure whether requesting 50 loan IDs will return paged results
 
-	var baseUrl = "/v1/loans"
+	var baseURL = "/v1/loans"
 	var url string
 	var loans []Loan
 	if len(loanIDs) == 0 {
@@ -199,7 +199,7 @@ func (c *Client) GetLoansByID(loanIDs ...int) ([]Loan, error) {
 	}
 
 	var lr UnpagedLoanResponse
-	err := c.do("GET", baseUrl+url, nil, nil, &lr)
+	err := c.do("GET", baseURL+url, nil, nil, &lr)
 	if err != nil {
 		return nil, err
 	}
@@ -210,7 +210,7 @@ func (c *Client) GetLoansByID(loanIDs ...int) ([]Loan, error) {
 func (c *Client) GetLoanJournalEntries(loanID int) {
 	// not sure this is even implemented... they don't seem
 	// to publish a schema for it either
-	//baseUrl := fmt.Sprintf("/v1/loans/%d/journal_entries", loanID)
+	//baseURL := fmt.Sprintf("/v1/loans/%d/journal_entries", loanID)
 }
 
 type PagedLendersResponse struct {
@@ -220,10 +220,10 @@ type PagedLendersResponse struct {
 
 func (c *Client) GetLoanLenders(loanID int) ([]Lender, error) {
 
-	baseUrl := fmt.Sprintf("/v1/loans/%d/lenders", loanID)
+	baseURL := fmt.Sprintf("/v1/loans/%d/lenders", loanID)
 	var lr PagedLendersResponse
 
-	err := c.do("GET", baseUrl, nil, nil, &lr)
+	err := c.do("GET", baseURL, nil, nil, &lr)
 	if err != nil {
 		return nil, err
 	}
@@ -241,10 +241,10 @@ func (c *Client) GetLoanLenders(loanID int) ([]Lender, error) {
 // }
 
 func (c *Client) GetSimilarLoans(loanID int) ([]Loan, error) {
-	baseUrl := fmt.Sprintf("/v1/loans/%d/similar", loanID)
+	baseURL := fmt.Sprintf("/v1/loans/%d/similar", loanID)
 	var lr UnpagedLoanResponse
 
-	err := c.do("GET", baseUrl, nil, nil, &lr)
+	err := c.do("GET", baseURL, nil, nil, &lr)
 	if err != nil {
 		return nil, err
 	}
@@ -263,11 +263,11 @@ type PagedLoanTeamsResponse struct {
 // FIXME: be able to pass options
 // FIXME: don't just return all pages at once
 func (c *Client) GetLoanTeams(loanID int) ([]Team, error) {
-	baseUrl := fmt.Sprintf("/v1/loans/%d/teams", loanID)
+	baseURL := fmt.Sprintf("/v1/loans/%d/teams", loanID)
 	var pr PagedLoanTeamsResponse
 
 	numPages := 1 // set initial value of number of pages to iterate through
-	err := c.do("GET", baseUrl, nil, nil, &pr)
+	err := c.do("GET", baseURL, nil, nil, &pr)
 	if err != nil {
 		return nil, err
 	}
@@ -283,7 +283,7 @@ func (c *Client) GetLoanTeams(loanID int) ([]Team, error) {
 
 	for i:=2; i <= numPages; i++ {
      	query.Set("page", strconv.Itoa(i)) 
-		err := c.do("GET", baseUrl, query, nil, &pr)
+		err := c.do("GET", baseURL, query, nil, &pr)
 		if err != nil {
 			return nil, err
 		}
@@ -299,11 +299,11 @@ func (c *Client) GetLoanTeams(loanID int) ([]Team, error) {
 // FIXME: be able to pass options
 // FIXME: don't just return all pages at once
 func (c *Client) GetNewestLoans() ([]Loan, error) {
-  baseUrl := "/v1/loans/newest"
+  baseURL := "/v1/loans/newest"
   var pr PagedLoanResponse
 
 	//numPages := 1 // set initial value of number of pages to iterate through
-	err := c.do("GET", baseUrl, nil, nil, &pr)
+	err := c.do("GET", baseURL, nil, nil, &pr)
 	if err != nil {
 		return nil, err
 	}
@@ -313,18 +313,18 @@ func (c *Client) GetNewestLoans() ([]Loan, error) {
     }
     //numPages = pr.Paging.Pages
     
-	loans := make([]Loan, pr.Paging.Total)
-	copy(loans, pr.Loans)
+	loans := make([]Loan, 0, pr.Paging.Total)
+	loans = append(loans, pr.Loans...)
 	query := url.Values{}
 
 	for i:=2; i <= 10; i++ {
      	query.Set("page", strconv.Itoa(i)) 
-		err := c.do("GET", baseUrl, query, nil, &pr)
+		err := c.do("GET", baseURL, query, nil, &pr)
 		if err != nil {
 			return nil, err
 		}
 		//numPages = pr.Paging.Pages // update numPages based on subsequent responses
-		copy(loans, pr.Loans)
+		loans = append(loans, pr.Loans...)
 	}
 
 	return loans, nil

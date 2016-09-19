@@ -68,7 +68,7 @@ func main() {
 
 	}
 	fmt.Println("printing new loans.....")
-	for _, v := range newLoans {
-		fmt.Println(v)
+	for i, v := range newLoans {
+		fmt.Println(i,": ", v)
 	}
 }
