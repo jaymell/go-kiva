@@ -62,7 +62,7 @@ func main() {
 	// 		fmt.Println("similar: ", w)
 	// 	}
 	// }
-	newLoans, err := cli.GetNewestLoans()
+	newLoans, err := cli.GetNewestLoans(5)
 	if err != nil {
 		log.Fatal(err)
 

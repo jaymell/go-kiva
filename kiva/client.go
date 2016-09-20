@@ -165,7 +165,7 @@ func (c *Client) do(method string, urlpath string, query url.Values, body io.Rea
 	}
 	decode := json.NewDecoder(resp.Body)
 	if err = decode.Decode(&v); err != nil {
-		return fmt.Errorf("cannot decode your dumb response: %s", err)
+		return fmt.Errorf("cannot decode json: %s", err)
 	}
 	return nil
 }
@@ -173,6 +173,49 @@ func (c *Client) do(method string, urlpath string, query url.Values, body io.Rea
 type PagedLoanResponse struct {
 	Paging PagingData `json: "paging"`
 	Loans  []Loan     `json: "loans"`
+}
+
+// wraps do to handle paged requests -- don't think this
+// can be generified via reflect without getting ridiculous:
+func (c *Client) doPagedLoan(method string, urlpath string, query url.Values, body io.Reader, numPages int) ([]Loan, error) {
+
+	var pr PagedLoanResponse
+
+	if numPages < 0 {
+		return nil, fmt.Errorf("less than zero is unacceptable") 
+	}
+
+  	// get the first page
+	err := c.do(method, urlpath, query, body, &pr)
+	if err != nil {
+		return nil, err
+	}
+    if pr.Paging.Pages == 1 {
+    	return pr.Loans, nil
+    } 
+    
+    // get all pages if zero -- maybe a bad idea:
+    if numPages == 0 {
+    	numPages = pr.Paging.Pages
+    }
+
+	loans := make([]Loan, 0, pr.Paging.Total)
+	loans = append(loans, pr.Loans...)
+
+	if query == nil {
+		query = url.Values{}
+	}
+
+	for i:=2; i <= numPages; i++ {
+     	query.Set("page", strconv.Itoa(i)) 
+		err := c.do("GET", urlpath, query, nil, &pr)
+		if err != nil {
+			return nil, err
+		}
+		loans = append(loans, pr.Loans...)
+	}
+
+	return loans, nil
 }
 
 type UnpagedLoanResponse struct {
@@ -218,6 +261,7 @@ type PagedLendersResponse struct {
 	Lenders []Lender   `json: "lenders"`
 }
 
+// FIXME: need to return ALL pages
 func (c *Client) GetLoanLenders(loanID int) ([]Lender, error) {
 
 	baseURL := fmt.Sprintf("/v1/loans/%d/lenders", loanID)
@@ -294,39 +338,11 @@ func (c *Client) GetLoanTeams(loanID int) ([]Team, error) {
 	return teams, nil
 }
 
-// FIXME: a lot of common code 
-// for paged responses can be factored
 // FIXME: be able to pass options
-// FIXME: don't just return all pages at once
-func (c *Client) GetNewestLoans() ([]Loan, error) {
+// FIXME: need to be able to handle possible changes in total
+	   // number of records when getting a large paged response ??
+func (c *Client) GetNewestLoans(numPages int) ([]Loan, error) {
   baseURL := "/v1/loans/newest"
-  var pr PagedLoanResponse
-
-	//numPages := 1 // set initial value of number of pages to iterate through
-	err := c.do("GET", baseURL, nil, nil, &pr)
-	if err != nil {
-		return nil, err
-	}
-
-    if pr.Paging.Pages < 2 {
-    	return pr.Loans, nil
-    }
-    //numPages = pr.Paging.Pages
-    
-	loans := make([]Loan, 0, pr.Paging.Total)
-	loans = append(loans, pr.Loans...)
-	query := url.Values{}
-
-	for i:=2; i <= 10; i++ {
-     	query.Set("page", strconv.Itoa(i)) 
-		err := c.do("GET", baseURL, query, nil, &pr)
-		if err != nil {
-			return nil, err
-		}
-		//numPages = pr.Paging.Pages // update numPages based on subsequent responses
-		loans = append(loans, pr.Loans...)
-	}
-
-	return loans, nil
+  return c.doPagedLoan("GET", baseURL, nil, nil, numPages)
 }
 
