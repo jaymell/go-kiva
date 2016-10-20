@@ -1,5 +1,24 @@
 package kiva
 
+/*
+paged methods:
+/lenders/:lender_id/teams
+/lenders/newest
+/lenders/search
+/loans/:id/journal_entries
+/loans/:id/lenders
+/loans/:id/teams
+/loans/newest
+/loans/search
+/my/loans
+/my/loans/:ids
+/my/teams
+/partners
+/teams/:id/lenders
+/teams/:id/loans
+/teams/search
+*/
+
 import (
 	"encoding/json"
 	"errors"
@@ -86,6 +105,30 @@ type PagingData struct {
 	Pages    int `json: "pages"`
 }
 
+type PagedLoanResponse struct {
+	Paging PagingData `json: "paging"`
+	Items  []Loan     `json: "loans"`
+}
+
+type PagedLenderResponse struct {
+	Paging  PagingData `json: "paging"`
+	Items []Lender   `json: "lenders"`
+}
+
+// type PagedLoanRepaymentsResponse struct {
+//   Paging PagingData `json: "paging"`
+
+// }
+
+type PagedLoanTeamResponse struct {
+	Paging PagingData `json: "paging"`
+	Items []Team `json: "teams"`
+}
+
+type UnpagedLoanResponse struct {
+	Loans []Loan `json: "loans"`
+}
+
 type doer interface {
 	Do(*http.Request) (*http.Response, error)
 }
@@ -170,56 +213,65 @@ func (c *Client) do(method string, urlpath string, query url.Values, body io.Rea
 	return nil
 }
 
-type PagedLoanResponse struct {
-	Paging PagingData `json: "paging"`
-	Loans  []Loan     `json: "loans"`
-}
 
-// wraps do to handle paged requests -- don't think this
-// can be generified via reflect without getting ridiculous:
-func (c *Client) doPagedLoan(method string, urlpath string, query url.Values, body io.Reader, numPages int) ([]Loan, error) {
 
-	var pr PagedLoanResponse
+// wraps "do" to handle paged requests
+func (c *Client) doPaged(method string, urlpath string, query url.Values, body io.Reader, v interface{}, numPages int) (error) {
 
-	if numPages < 0 {
-		return nil, fmt.Errorf("less than zero is unacceptable") 
-	}
-
-  	// get the first page
-	err := c.do(method, urlpath, query, body, &pr)
-	if err != nil {
-		return nil, err
-	}
-    if pr.Paging.Pages == 1 {
-    	return pr.Loans, nil
-    } 
-    
-    // get all pages if zero -- maybe a bad idea:
-    if numPages == 0 {
-    	numPages = pr.Paging.Pages
-    }
-
-	loans := make([]Loan, 0, pr.Paging.Total)
-	loans = append(loans, pr.Loans...)
+	var pr interface{}
 
 	if query == nil {
 		query = url.Values{}
 	}
 
+	if numPages < 0 {
+		return fmt.Errorf("less than zero is unacceptable") 
+	}
+
+  	// get the first page
+	err := c.do(method, urlpath, query, body, pr)
+	if err != nil {
+		return err
+	}
+
+	var items interface{}
+	var newpr interface{}
+
+	switch pr := pr.(type) {
+		default:
+			fmt.Errorf("Unexpected type %T", pr)
+		case PagedLoanResponse:
+			newpr = pr
+			items = make([]Loan, 0, pr.Paging.Total)
+		case PagedLenderResponse:
+			newpr = pr
+			items = make([]Lender, 0, pr.Paging.Total)
+		case PagedLoanTeamResponse:
+			newpr = pr
+			items = make([]Team, 0, pr.Paging.Total)
+	}
+
+    if newpr.Paging.Pages == 1 {
+    	return pr.Items, nil
+    } 
+    
+    // get all pages if zero -- maybe a bad idea:
+    if numPages == 0 {
+    	numPages = newpr.Paging.Pages
+    }
+
+	items = append(items, newpr.Items...)
+	
 	for i:=2; i <= numPages; i++ {
      	query.Set("page", strconv.Itoa(i)) 
-		err := c.do("GET", urlpath, query, nil, &pr)
+		err := c.do("GET", urlpath, query, nil, &newpr)
 		if err != nil {
 			return nil, err
 		}
-		loans = append(loans, pr.Loans...)
+		items = append(items, pr.Items...)
 	}
 
-	return loans, nil
-}
-
-type UnpagedLoanResponse struct {
-	Loans []Loan `json: "loans"`
+	return items, nil
 }
 
 func (c *Client) GetLoansByID(loanIDs ...int) ([]Loan, error) {
@@ -256,16 +308,13 @@ func (c *Client) GetLoanJournalEntries(loanID int) {
 	//baseURL := fmt.Sprintf("/v1/loans/%d/journal_entries", loanID)
 }
 
-type PagedLendersResponse struct {
-	Paging  PagingData `json: "paging"`
-	Lenders []Lender   `json: "lenders"`
-}
+
 
 // FIXME: need to return ALL pages
 func (c *Client) GetLoanLenders(loanID int) ([]Lender, error) {
 
 	baseURL := fmt.Sprintf("/v1/loans/%d/lenders", loanID)
-	var lr PagedLendersResponse
+	var lr PagedLenderResponse
 
 	err := c.do("GET", baseURL, nil, nil, &lr)
 	if err != nil {
@@ -275,10 +324,7 @@ func (c *Client) GetLoanLenders(loanID int) ([]Lender, error) {
 	return lr.Lenders, nil
 }
 
-// type PagedLoanRepaymentsResponse struct {
-//   Paging PagingData `json: "paging"`
 
-// }
 
 // func (c *Client) GetLoanRepayments(loanID int) {
 //  // can't find data on this
@@ -296,10 +342,7 @@ func (c *Client) GetSimilarLoans(loanID int) ([]Loan, error) {
 	return lr.Loans, nil
 }
 
-type PagedLoanTeamsResponse struct {
-	Paging PagingData `json: "paging"`
-	Teams []Team `json: "teams"`
-}
+
 
 
 // FIXME: a lot of common code 
