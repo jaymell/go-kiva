@@ -27,6 +27,7 @@ import (
 	"net/http"
 	"net/url"
 	"path"
+    //"reflect"
 	"strconv"
 	"time"
 )
@@ -111,8 +112,8 @@ type PagedLoanResponse struct {
 }
 
 type PagedLenderResponse struct {
-	Paging  PagingData `json: "paging"`
-	Items []Lender   `json: "lenders"`
+	Paging PagingData `json: "paging"`
+	Items  []Lender   `json: "lenders"`
 }
 
 // type PagedLoanRepaymentsResponse struct {
@@ -122,7 +123,7 @@ type PagedLenderResponse struct {
 
 type PagedLoanTeamResponse struct {
 	Paging PagingData `json: "paging"`
-	Items []Team `json: "teams"`
+	Items  []Team     `json: "teams"`
 }
 
 type UnpagedLoanResponse struct {
@@ -136,18 +137,18 @@ type doer interface {
 type Client struct {
 	baseURL *url.URL
 	doer    doer
-	appID string
+	appID   string
 }
 
 type Config struct {
 	BaseURL string
-	AppID string
+	AppID   string
 }
 
 func DefaultConfig() *Config {
 	return &Config{
 		BaseURL: "http://api.kivaws.org",
-		AppID: "",		
+		AppID:   "",
 	}
 }
 
@@ -155,22 +156,22 @@ func New(config *Config) *Client {
 	defaultConfig := DefaultConfig()
 	if config == nil {
 		config = defaultConfig
-	} 
+	}
 
-    if config.BaseURL == "" {
+	if config.BaseURL == "" {
 		config.BaseURL = defaultConfig.BaseURL
-    }
-    
-    baseURL, err := url.Parse(config.BaseURL)
+	}
+
+	baseURL, err := url.Parse(config.BaseURL)
 	if err != nil {
 		panic(fmt.Sprintf("cannot parse base URL: %q (%v)", config.BaseURL, err))
 	}
 
 	return &Client{
 		baseURL: baseURL,
-		doer:    &http.Client{
-				Timeout: time.Second * 10,
-			},
+		doer: &http.Client{
+			Timeout: time.Second * 10,
+		},
 		appID: config.AppID,
 	}
 }
@@ -199,7 +200,7 @@ func (c *Client) do(method string, urlpath string, query url.Values, body io.Rea
 		if query == nil {
 			query = newQuery
 		}
-		query.Set("app_id", c.appID)		
+		query.Set("app_id", c.appID)
 	}
 
 	resp, err := c.raw(method, urlpath, query, body)
@@ -213,60 +214,51 @@ func (c *Client) do(method string, urlpath string, query url.Values, body io.Rea
 	return nil
 }
 
-
-
 // wraps "do" to handle paged requests
-func (c *Client) doPaged(method string, urlpath string, query url.Values, body io.Reader, v interface{}, numPages int) (error) {
+func (c *Client) doPaged(method string, urlpath string, query url.Values, body io.Reader, v interface{}, numPages int) ([]interface{}, error) {
 
-	var pr interface{}
-
+    var pr interface{}
 	if query == nil {
 		query = url.Values{}
 	}
 
 	if numPages < 0 {
-		return fmt.Errorf("less than zero is unacceptable") 
+		return nil, fmt.Errorf("less than zero is unacceptable")
 	}
 
-  	// get the first page
+	// get the first page
 	err := c.do(method, urlpath, query, body, pr)
 	if err != nil {
-		return err
+        fmt.Println("Fucked!")
+		return nil, err
 	}
 
-	var items interface{}
-	var newpr interface{}
-
-	switch pr := pr.(type) {
-		default:
-			fmt.Errorf("Unexpected type %T", pr)
-		case PagedLoanResponse:
-			newpr = pr
-			items = make([]Loan, 0, pr.Paging.Total)
-		case PagedLenderResponse:
-			newpr = pr
-			items = make([]Lender, 0, pr.Paging.Total)
-		case PagedLoanTeamResponse:
-			newpr = pr
-			items = make([]Team, 0, pr.Paging.Total)
+  var items interface{}
+       switch pr := pr.(type) {
+               default:
+                       fmt.Errorf("Unexpected type %T", pr)
+               case PagedLoanResponse:
+                       items = make([]Loan, 0, pr.Paging.Total)
+               case PagedLenderResponse:
+                       items = make([]Lender, 0, pr.Paging.Total)
+               case PagedLoanTeamResponse:
+                       items = make([]Team, 0, pr.Paging.Total)
+}
+	if pr.Paging.Pages == 1 {
+		return pr.Items, nil
 	}
 
-    if newpr.Paging.Pages == 1 {
-    	return pr.Items, nil
-    } 
-    
-    // get all pages if zero -- maybe a bad idea:
-    if numPages == 0 {
-    	numPages = newpr.Paging.Pages
-    }
+	// get all pages if zero:
+	if numPages == 0 {
+		numPages = pr.Paging.Pages
+	}
 
-	items = append(items, newpr.Items...)
-	
-	for i:=2; i <= numPages; i++ {
-     	query.Set("page", strconv.Itoa(i)) 
-		err := c.do("GET", urlpath, query, nil, &newpr)
+
+	for i := 2; i <= numPages; i++ {
+		query.Set("page", strconv.Itoa(i))
+		err := c.do("GET", urlpath, query, nil, &pr)
 		if err != nil {
-			return nil, err
+			return nil
 		}
 		items = append(items, pr.Items...)
 	}
@@ -308,8 +300,6 @@ func (c *Client) GetLoanJournalEntries(loanID int) {
 	//baseURL := fmt.Sprintf("/v1/loans/%d/journal_entries", loanID)
 }
 
-
-
 // FIXME: need to return ALL pages
 func (c *Client) GetLoanLenders(loanID int) ([]Lender, error) {
 
@@ -321,10 +311,8 @@ func (c *Client) GetLoanLenders(loanID int) ([]Lender, error) {
 		return nil, err
 	}
 	// FIXME: need to return ALL pages
-	return lr.Lenders, nil
+	return lr.Items, nil
 }
-
-
 
 // func (c *Client) GetLoanRepayments(loanID int) {
 //  // can't find data on this
@@ -342,13 +330,11 @@ func (c *Client) GetSimilarLoans(loanID int) ([]Loan, error) {
 	return lr.Loans, nil
 }
 
-
-
-
-// FIXME: a lot of common code 
+// FIXME: a lot of common code
 // for paged responses can be factored
 // FIXME: be able to pass options
 // FIXME: don't just return all pages at once
+/*
 func (c *Client) GetLoanTeams(loanID int) ([]Team, error) {
 	baseURL := fmt.Sprintf("/v1/loans/%d/teams", loanID)
 	var pr PagedLoanTeamsResponse
@@ -359,17 +345,17 @@ func (c *Client) GetLoanTeams(loanID int) ([]Team, error) {
 		return nil, err
 	}
 
-    if pr.Paging.Pages < 2 {
-    	return pr.Teams, nil
-    }
-    numPages = pr.Paging.Pages
+	if pr.Paging.Pages < 2 {
+		return pr.Teams, nil
+	}
+	numPages = pr.Paging.Pages
 
 	teams := make([]Team, pr.Paging.Total)
 	copy(teams, pr.Teams)
 	query := url.Values{}
 
-	for i:=2; i <= numPages; i++ {
-     	query.Set("page", strconv.Itoa(i)) 
+	for i := 2; i <= numPages; i++ {
+		query.Set("page", strconv.Itoa(i))
 		err := c.do("GET", baseURL, query, nil, &pr)
 		if err != nil {
 			return nil, err
@@ -380,12 +366,12 @@ func (c *Client) GetLoanTeams(loanID int) ([]Team, error) {
 
 	return teams, nil
 }
-
+*/
 // FIXME: be able to pass options
 // FIXME: need to be able to handle possible changes in total
-	   // number of records when getting a large paged response ??
+// number of records when getting a large paged response ??
 func (c *Client) GetNewestLoans(numPages int) ([]Loan, error) {
-  baseURL := "/v1/loans/newest"
-  return c.doPagedLoan("GET", baseURL, nil, nil, numPages)
+	baseURL := "/v1/loans/newest"
+    var p PagedLoanResponse
+	loans, nil := c.doPaged("GET", baseURL, nil, nil, p, numPages)
 }
-

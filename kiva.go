@@ -5,7 +5,7 @@ import (
 	"github.com/jaymell/go-kiva/kiva"
 	"os"
 	"strconv"
-	"log"
+	//"log"
 )
 
 func Client() *kiva.Client {
@@ -63,12 +63,17 @@ func main() {
 	// 	}
 	// }
 	newLoans, err := cli.GetNewestLoans(5)
+	//cli.GetNewestLoans(5)
+
 	if err != nil {
 		log.Fatal(err)
 
 	}
+
 	fmt.Println("printing new loans.....")
+
 	for i, v := range newLoans {
 		fmt.Println(i,": ", v)
 	}
+
 }
