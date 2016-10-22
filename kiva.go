@@ -5,7 +5,7 @@ import (
 	"github.com/jaymell/go-kiva/kiva"
 	"os"
 	"strconv"
-	//"log"
+	"log"
 )
 
 func Client() *kiva.Client {

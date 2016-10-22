@@ -99,31 +99,43 @@ type LocationData struct {
 	Town    string            `json: "town"`
 }
 
-type PagingData struct {
+type pagingData struct {
 	Total    int `json: "total"`
 	Page     int `json: "page"`
 	PageSize int `json: "page_size"`
 	Pages    int `json: "pages"`
 }
 
+type Pageable interface {
+	Paging() pagingData
+}
+
+type Pager struct {
+	PagingData pagingData 
+}
+
+func (p Pager) Paging() pagingData {
+	return p.PagingData
+}
+
 type PagedLoanResponse struct {
-	Paging PagingData `json: "paging"`
-	Items  []Loan     `json: "loans"`
+	Pager
+	Loans  []Loan     `json: "loans"`
 }
 
 type PagedLenderResponse struct {
-	Paging PagingData `json: "paging"`
-	Items  []Lender   `json: "lenders"`
+	Pager
+	Lenders  []Lender   `json: "lenders"`
 }
 
 // type PagedLoanRepaymentsResponse struct {
-//   Paging PagingData `json: "paging"`
+//   Paging pagingData `json: "paging"`
 
 // }
 
 type PagedLoanTeamResponse struct {
-	Paging PagingData `json: "paging"`
-	Items  []Team     `json: "teams"`
+	Pager
+	Teams  []Team     `json: "teams"`
 }
 
 type UnpagedLoanResponse struct {
@@ -215,55 +227,46 @@ func (c *Client) do(method string, urlpath string, query url.Values, body io.Rea
 }
 
 // wraps "do" to handle paged requests
-func (c *Client) doPaged(method string, urlpath string, query url.Values, body io.Reader, v interface{}, numPages int) ([]interface{}, error) {
+func (c *Client) doPaged(urlpath string, query url.Values, numPages int) ([]Pageable, error) {
 
-    var pr interface{}
-	if query == nil {
-		query = url.Values{}
-	}
+	resp := make([]Pageable, 1)
 
 	if numPages < 0 {
 		return nil, fmt.Errorf("less than zero is unacceptable")
 	}
 
+	if query == nil {
+		query = url.Values{}
+	}
+
 	// get the first page
-	err := c.do(method, urlpath, query, body, pr)
+	err := c.do("GET", urlpath, query, nil, &resp[0])
 	if err != nil {
-        fmt.Println("Fucked!")
 		return nil, err
 	}
 
-  var items interface{}
-       switch pr := pr.(type) {
-               default:
-                       fmt.Errorf("Unexpected type %T", pr)
-               case PagedLoanResponse:
-                       items = make([]Loan, 0, pr.Paging.Total)
-               case PagedLenderResponse:
-                       items = make([]Lender, 0, pr.Paging.Total)
-               case PagedLoanTeamResponse:
-                       items = make([]Team, 0, pr.Paging.Total)
-}
-	if pr.Paging.Pages == 1 {
-		return pr.Items, nil
-	}
+	paging := resp[0].Paging()
 
+	if paging.Pages == 1 {
+		return resp, nil
+	} 
 	// get all pages if zero:
 	if numPages == 0 {
-		numPages = pr.Paging.Pages
+		numPages = paging.Pages
 	}
 
+	pr := make([]Pageable, numPages*paging.PageSize, paging.Total)
+	pr[0] = resp[0]
 
 	for i := 2; i <= numPages; i++ {
 		query.Set("page", strconv.Itoa(i))
-		err := c.do("GET", urlpath, query, nil, &pr)
+		err := c.do("GET", urlpath, query, nil, &pr[i-1])
 		if err != nil {
-			return nil
+			return nil, err
 		}
-		items = append(items, pr.Items...)
 	}
 
-	return items, nil
+	return pr, nil
 }
 
 func (c *Client) GetLoansByID(loanIDs ...int) ([]Loan, error) {
@@ -301,18 +304,18 @@ func (c *Client) GetLoanJournalEntries(loanID int) {
 }
 
 // FIXME: need to return ALL pages
-func (c *Client) GetLoanLenders(loanID int) ([]Lender, error) {
+// func (c *Client) GetLoanLenders(loanID int) ([]Lender, error) {
 
-	baseURL := fmt.Sprintf("/v1/loans/%d/lenders", loanID)
-	var lr PagedLenderResponse
+// 	baseURL := fmt.Sprintf("/v1/loans/%d/lenders", loanID)
+// 	var lr PagedLenderResponse
 
-	err := c.do("GET", baseURL, nil, nil, &lr)
-	if err != nil {
-		return nil, err
-	}
-	// FIXME: need to return ALL pages
-	return lr.Items, nil
-}
+// 	err := c.do("GET", baseURL, nil, nil, &lr)
+// 	if err != nil {
+// 		return nil, err
+// 	}
+// 	// FIXME: need to return ALL pages
+// 	return lr.Items, nil
+// }
 
 // func (c *Client) GetLoanRepayments(loanID int) {
 //  // can't find data on this
@@ -372,6 +375,19 @@ func (c *Client) GetLoanTeams(loanID int) ([]Team, error) {
 // number of records when getting a large paged response ??
 func (c *Client) GetNewestLoans(numPages int) ([]Loan, error) {
 	baseURL := "/v1/loans/newest"
-    var p PagedLoanResponse
-	loans, nil := c.doPaged("GET", baseURL, nil, nil, p, numPages)
+	prt, err := c.doPaged(baseURL, nil, numPages)
+	if err != nil {
+		return nil, err
+	}
+	paging := prt[0].Paging()
+	loans := make([]Loan, paging.Pages * paging.PageSize)
+	iter := 0
+    for _, v := range prt {
+		pr := v.(PagedLoanResponse)
+    	for _, w := range pr.Loans {
+	    	loans[iter] = w
+	    	iter++
+    	}
+    }
+    return loans, nil
 }
