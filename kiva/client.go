@@ -2,21 +2,21 @@ package kiva
 
 /*
 paged methods:
-/lenders/:lender_id/teams
-/lenders/newest
-/lenders/search
-/loans/:id/journal_entries
-/loans/:id/lenders
-/loans/:id/teams
-/loans/newest
-/loans/search
-/my/loans
-/my/loans/:ids
-/my/teams
-/partners
-/teams/:id/lenders
-/teams/:id/loans
-/teams/search
+	/lenders/:lender_id/teams
+	/lenders/newest
+	/lenders/search
+	/loans/:id/journal_entries
+	/loans/:id/lenders
+	/loans/:id/teams
+	/loans/newest
+	/loans/search
+	/my/loans
+	/my/loans/:ids
+	/my/teams
+	/partners
+	/teams/:id/lenders
+	/teams/:id/loans
+	/teams/search
 */
 
 import (
@@ -27,7 +27,7 @@ import (
 	"net/http"
 	"net/url"
 	"path"
-    //"reflect"
+	//"reflect"
 	"strconv"
 	"time"
 )
@@ -102,7 +102,7 @@ type LocationData struct {
 type pagingData struct {
 	Total    int `json: "total"`
 	Page     int `json: "page"`
-	PageSize int `json: "page_size"`
+	PageSize int `json:"page_size"`
 	Pages    int `json: "pages"`
 }
 
@@ -111,7 +111,7 @@ type Pageable interface {
 }
 
 type Pager struct {
-	PagingData pagingData 
+	PagingData pagingData `json:"paging"`
 }
 
 func (p Pager) Paging() pagingData {
@@ -120,12 +120,12 @@ func (p Pager) Paging() pagingData {
 
 type PagedLoanResponse struct {
 	Pager
-	Loans  []Loan     `json: "loans"`
+	Loans []Loan `json: "loans"`
 }
 
 type PagedLenderResponse struct {
 	Pager
-	Lenders  []Lender   `json: "lenders"`
+	Lenders []Lender `json: "lenders"`
 }
 
 // type PagedLoanRepaymentsResponse struct {
@@ -133,9 +133,9 @@ type PagedLenderResponse struct {
 
 // }
 
-type PagedLoanTeamResponse struct {
+type PagedTeamResponse struct {
 	Pager
-	Teams  []Team     `json: "teams"`
+	Teams []Team `json: "teams"`
 }
 
 type UnpagedLoanResponse struct {
@@ -227,8 +227,17 @@ func (c *Client) do(method string, urlpath string, query url.Values, body io.Rea
 }
 
 // wraps "do" to handle paged requests
-func (c *Client) doPaged(urlpath string, query url.Values, numPages int) ([]Pageable, error) {
+func (c *Client) doPaged(urlpath string, query url.Values, pr Pageable, numPages int) ([]Pageable, error) {
 
+	/* algerrithm:
+	verify numpages is a sane number -- not < 0
+	get first page
+	// example of initial response if no pages:
+	//	{"paging":{"page":1,"total":0,"page_size":50,"pages":0},"lenders":[]}
+	if numPages == 1 or total <= 1, return response
+	set numPages to lesser of numPages and total
+	iterate while i < numPages and return response array
+	*/
 	resp := make([]Pageable, 1)
 
 	if numPages < 0 {
@@ -240,33 +249,35 @@ func (c *Client) doPaged(urlpath string, query url.Values, numPages int) ([]Page
 	}
 
 	// get the first page
-	err := c.do("GET", urlpath, query, nil, &resp[0])
+	err := c.do("GET", urlpath, query, nil, &pr)
 	if err != nil {
 		return nil, err
 	}
 
+	resp[0] = pr
 	paging := resp[0].Paging()
 
-	if paging.Pages == 1 {
+	if numPages == 1 || paging.Pages <= 1 {
 		return resp, nil
-	} 
+	}
+
 	// get all pages if zero:
 	if numPages == 0 {
 		numPages = paging.Pages
 	}
 
-	pr := make([]Pageable, numPages*paging.PageSize, paging.Total)
-	pr[0] = resp[0]
+	respArr := make([]Pageable, numPages)
+	copy(respArr, resp)
 
 	for i := 2; i <= numPages; i++ {
 		query.Set("page", strconv.Itoa(i))
-		err := c.do("GET", urlpath, query, nil, &pr[i-1])
+		err := c.do("GET", urlpath, query, nil, &pr)
 		if err != nil {
 			return nil, err
 		}
+		respArr[i-1] = pr
 	}
-
-	return pr, nil
+	return respArr, nil
 }
 
 func (c *Client) GetLoansByID(loanIDs ...int) ([]Loan, error) {
@@ -297,31 +308,10 @@ func (c *Client) GetLoansByID(loanIDs ...int) ([]Loan, error) {
 	return lr.Loans, nil
 }
 
-func (c *Client) GetLoanJournalEntries(loanID int) {
-	// not sure this is even implemented... they don't seem
-	// to publish a schema for it either
-	//baseURL := fmt.Sprintf("/v1/loans/%d/journal_entries", loanID)
-}
-
-// FIXME: need to return ALL pages
-// func (c *Client) GetLoanLenders(loanID int) ([]Lender, error) {
-
-// 	baseURL := fmt.Sprintf("/v1/loans/%d/lenders", loanID)
-// 	var lr PagedLenderResponse
-
-// 	err := c.do("GET", baseURL, nil, nil, &lr)
-// 	if err != nil {
-// 		return nil, err
-// 	}
-// 	// FIXME: need to return ALL pages
-// 	return lr.Items, nil
-// }
-
-// func (c *Client) GetLoanRepayments(loanID int) {
-//  // can't find data on this
-// }
-
 func (c *Client) GetSimilarLoans(loanID int) ([]Loan, error) {
+
+	// FIXME -- allow to specify count
+
 	baseURL := fmt.Sprintf("/v1/loans/%d/similar", loanID)
 	var lr UnpagedLoanResponse
 
@@ -333,61 +323,97 @@ func (c *Client) GetSimilarLoans(loanID int) ([]Loan, error) {
 	return lr.Loans, nil
 }
 
-// FIXME: a lot of common code
-// for paged responses can be factored
-// FIXME: be able to pass options
-// FIXME: don't just return all pages at once
-/*
-func (c *Client) GetLoanTeams(loanID int) ([]Team, error) {
-	baseURL := fmt.Sprintf("/v1/loans/%d/teams", loanID)
-	var pr PagedLoanTeamsResponse
-
-	numPages := 1 // set initial value of number of pages to iterate through
-	err := c.do("GET", baseURL, nil, nil, &pr)
+func (c *Client) GetPagedLoanResponse(urlpath string, query url.Values, numPages int) ([]Loan, error) {
+	var respType PagedLoanResponse
+	prArray, err := c.doPaged(urlpath, query, &respType, numPages)
 	if err != nil {
 		return nil, err
 	}
-
-	if pr.Paging.Pages < 2 {
-		return pr.Teams, nil
-	}
-	numPages = pr.Paging.Pages
-
-	teams := make([]Team, pr.Paging.Total)
-	copy(teams, pr.Teams)
-	query := url.Values{}
-
-	for i := 2; i <= numPages; i++ {
-		query.Set("page", strconv.Itoa(i))
-		err := c.do("GET", baseURL, query, nil, &pr)
-		if err != nil {
-			return nil, err
+	paging := prArray[0].Paging()
+	loans := make([]Loan, len(prArray)*paging.PageSize)
+	iter := 0
+	for _, v := range prArray {
+		pr := v.(*PagedLoanResponse)
+		for _, loan := range pr.Loans {
+			loans[iter] = loan
+			iter++
 		}
-		numPages = pr.Paging.Pages // update numPages based on subsequent responses
-		copy(teams, pr.Teams)
 	}
-
-	return teams, nil
+	return loans, nil
 }
-*/
-// FIXME: be able to pass options
-// FIXME: need to be able to handle possible changes in total
-// number of records when getting a large paged response ??
+
 func (c *Client) GetNewestLoans(numPages int) ([]Loan, error) {
 	baseURL := "/v1/loans/newest"
-	prt, err := c.doPaged(baseURL, nil, numPages)
+	loans, err := c.GetPagedLoanResponse(baseURL, nil, numPages)
 	if err != nil {
 		return nil, err
 	}
-	paging := prt[0].Paging()
-	loans := make([]Loan, paging.Pages * paging.PageSize)
-	iter := 0
-    for _, v := range prt {
-		pr := v.(PagedLoanResponse)
-    	for _, w := range pr.Loans {
-	    	loans[iter] = w
-	    	iter++
-    	}
-    }
-    return loans, nil
+	return loans, nil
 }
+
+func (c *Client) GetPagedLenderResponse(urlpath string, query url.Values, numPages int) ([]Lender, error) {
+	var respType PagedLenderResponse
+	prArray, err := c.doPaged(urlpath, query, &respType, numPages)
+	if err != nil {
+		return nil, err
+	}
+	paging := prArray[0].Paging()
+	lenders := make([]Lender, len(prArray)*paging.PageSize)
+	iter := 0
+	for _, v := range prArray {
+		pr := v.(*PagedLenderResponse)
+		for _, lender := range pr.Lenders {
+			lenders[iter] = lender
+			iter++
+		}
+	}
+	return lenders, nil
+}
+
+func (c *Client) GetLoanLenders(loanID int) ([]Lender, error) {
+
+	baseURL := fmt.Sprintf("/v1/loans/%d/lenders", loanID)
+	lenders, err := c.GetPagedLenderResponse(baseURL, nil, 0)
+	if err != nil {
+		return nil, err
+	}
+	return lenders, nil
+}
+
+func (c *Client) GetPagedTeamResponse(urlpath string, query url.Values, numPages int) ([]Team, error) {
+	var respType PagedTeamResponse
+	prArray, err := c.doPaged(urlpath, query, &respType, numPages)
+	if err != nil {
+		return nil, err
+	}
+	paging := prArray[0].Paging()
+	teams := make([]Team, len(prArray)*paging.PageSize)
+	iter := 0
+	for _, v := range prArray {
+		pr := v.(*PagedTeamResponse)
+		for _, team := range pr.Teams {
+			teams[iter] = team
+			iter++
+		}
+	}
+	return teams, nil
+}
+
+func (c *Client) GetLoanTeams(loanID int) ([]Team, error) {
+	baseURL := fmt.Sprintf("/v1/loans/%d/teams", loanID)
+	teams, err := c.GetPagedTeamResponse(baseURL, nil, 0)
+	if err != nil {
+		return nil, err
+	}
+	return teams, nil
+}
+
+// func (c *Client) GetLoanRepayments(loanID int) {
+//  // can't find data on this
+// }
+
+// func (c *Client) GetLoanJournalEntries(loanID int) {
+// 	// not sure this is even implemented... they don't seem
+// 	// to publish a schema for it either
+// 	//baseURL := fmt.Sprintf("/v1/loans/%d/journal_entries", loanID)
+// }
