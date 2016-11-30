@@ -226,6 +226,11 @@ func (c *Client) do(method string, urlpath string, query url.Values, body io.Rea
 	return nil
 }
 
+type ChannelResult struct {
+    Val Pageable
+    Err error
+}
+
 // wraps "do" to handle paged requests
 func (c *Client) doPaged(urlpath string, query url.Values, pr Pageable, numPages int) ([]Pageable, error) {
 
@@ -268,16 +273,34 @@ func (c *Client) doPaged(urlpath string, query url.Values, pr Pageable, numPages
 
 	respArr := make([]Pageable, numPages)
 	copy(respArr, resp)
+	ch := make(chan ChannelResult)
 
 	for i := 2; i <= numPages; i++ {
-		query.Set("page", strconv.Itoa(i))
-		err := c.do("GET", urlpath, query, nil, &pr)
-		if err != nil {
-			return nil, err
-		}
-		respArr[i-1] = pr
+		go func(i int) error {
+			fmt.Println("i: ", i)
+			query.Set("page", strconv.Itoa(i))
+			err := c.do("GET", urlpath, query, nil, &pr)
+			if err != nil {
+				ch <- ChannelResult{Val: nil, Err: err }
+			}
+			ch <- ChannelResult{Val: pr, Err: nil }
+			return nil
+		}(i)
 	}
-	return respArr, nil
+
+	for {
+		select {
+			case r := <- ch:
+				if r.Err != nil {
+					return nil, err
+				}
+				respArr = append(respArr, r.Val)
+				if len(respArr) == numPages { 
+					return respArr, nil
+				}
+		}
+	}
+	// return respArr, nil
 }
 
 func (c *Client) GetLoansByID(loanIDs ...int) ([]Loan, error) {
