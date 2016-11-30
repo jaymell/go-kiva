@@ -29,6 +29,7 @@ import (
 	"path"
 	//"reflect"
 	"strconv"
+	"sync"
 	"time"
 )
 
@@ -150,6 +151,7 @@ type Client struct {
 	baseURL *url.URL
 	doer    doer
 	appID   string
+	mtx 	sync.Mutex
 }
 
 type Config struct {
@@ -226,34 +228,43 @@ func (c *Client) do(method string, urlpath string, query url.Values, body io.Rea
 	return nil
 }
 
-// wraps "do" to handle paged requests
-func (c *Client) doPaged(urlpath string, query url.Values, pr Pageable, numPages int) ([]Pageable, error) {
+type ChannelResult struct {
+    Val *http.Response
+    Err error
+}
 
-	/* algerrithm:
-	verify numpages is a sane number -- not < 0
-	get first page
-	// example of initial response if no pages:
-	//	{"paging":{"page":1,"total":0,"page_size":50,"pages":0},"lenders":[]}
-	if numPages == 1 or total <= 1, return response
-	set numPages to lesser of numPages and total
-	iterate while i < numPages and return response array
-	*/
-	resp := make([]Pageable, 1)
+// thread-safe "do" to handle paged requests
+func (c *Client) doPaged(urlpath string, query url.Values, pr Pageable, numPages int) ([]Pageable, error) {
+	// FIXME: reimplements c.do, gets 1st 
+	// page of response and decodes it, uses that info to determine
+	// how many subsequent pages there will be, then gets all of those
+	// raw responses in a go routine, then decodes all the raw
+	// responses... surely this be done more succinctly
 
 	if numPages < 0 {
 		return nil, fmt.Errorf("less than zero is unacceptable")
 	}
-
-	if query == nil {
-		query = url.Values{}
+	
+	newQuery := url.Values{}
+	if c.appID != "" {
+		if query == nil {
+			query = newQuery
+		}
+		query.Set("app_id", c.appID)
 	}
 
-	// get the first page
-	err := c.do("GET", urlpath, query, nil, &pr)
+	raw, err := c.raw("GET", urlpath, query, nil)
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("error making request: %s", err)
 	}
 
+	// have to decode first response so we know how many pages:
+	decode := json.NewDecoder(raw.Body)
+	if err = decode.Decode(&pr); err != nil {
+		return nil, fmt.Errorf("cannot decode json: %s", err)
+	}
+
+	resp := make([]Pageable, 1)
 	resp[0] = pr
 	paging := resp[0].Paging()
 
@@ -266,17 +277,53 @@ func (c *Client) doPaged(urlpath string, query url.Values, pr Pageable, numPages
 		numPages = paging.Pages
 	}
 
-	respArr := make([]Pageable, numPages)
-	copy(respArr, resp)
+	// array of raw responses which will
+	// be decoded AFTER all have been collected:
 
+	ch := make(chan ChannelResult)
 	for i := 2; i <= numPages; i++ {
-		query.Set("page", strconv.Itoa(i))
-		err := c.do("GET", urlpath, query, nil, &pr)
-		if err != nil {
-			return nil, err
-		}
-		respArr[i-1] = pr
+		go func(i int) {
+			fmt.Println("i: ", i)
+			q := url.Values{}
+			for k,v := range query {
+  				q[k] = v
+			}
+			q.Set("page", strconv.Itoa(i))
+			raw, err := c.raw("GET", urlpath, query, nil)
+			if err != nil {
+				ch <- ChannelResult{Val: nil, Err: err }
+			}
+			ch <- ChannelResult{Val: raw, Err: nil }
+		}(i)
 	}
+	
+	var rawArr []*http.Response
+	for {
+		select {
+			case r := <- ch:
+				if r.Err != nil {
+					return nil, err
+				}
+				rawArr = append(rawArr, r.Val)
+				fmt.Println("THIS: ", rawArr[len(rawArr)-1])
+
+		}
+		if len(rawArr) == numPages-1 { 
+			break
+		}
+	}
+
+	respArr := make([]Pageable, 1)
+	copy(respArr, resp)
+	fmt.Println("THIS: ", rawArr[0])
+	for _, val := range rawArr {
+		decode := json.NewDecoder(val.Body)
+		if err = decode.Decode(&pr); err != nil {
+			return nil, fmt.Errorf("cannot decode json: %s", err)
+		}
+		respArr = append(respArr, pr)	
+	}
+
 	return respArr, nil
 }
 

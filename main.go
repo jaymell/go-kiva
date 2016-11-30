@@ -26,54 +26,54 @@ func main() {
 		}
 		// loanIDs[i], _ = strconv.Atoi(v)
 	}
-	loans, err := cli.GetLoansByID(loanIDs...)
-	if err != nil {
-		log.Fatal(err)
-	}
-	fmt.Println("loans ", loans)
-
-	for k, v := range loans {
-		fmt.Println(k, v)
-	}
-
-	for _, v := range loanIDs {
-
-		teams, err := cli.GetLoanTeams(v)
-		for _, w := range teams {
-			fmt.Println("team: ", w)
-		}
-
-		lenders, err := cli.GetLoanLenders(v)
-		if err != nil {
-			log.Fatal(err)
-			break
-		}
-
-		for _, w := range lenders {
-			fmt.Println("lender: ", w)
-		}
-		
-		similar, err := cli.GetSimilarLoans(v)
-		if err != nil {
-			log.Fatal(err)
-			break
-		}
-		for _, w := range similar {
-			fmt.Println("similar: ", w)
-		}
-	}
-
-	// newLoans, err := cli.GetNewestLoans(5)
-
+	// loans, err := cli.GetLoansByID(loanIDs...)
 	// if err != nil {
 	// 	log.Fatal(err)
+	// }
+	// fmt.Println("loans ", loans)
 
+	// for k, v := range loans {
+	// 	fmt.Println(k, v)
 	// }
 
-	// fmt.Println("printing new loans.....")
+	// for _, v := range loanIDs {
 
-	// for i, v := range newLoans {
-	// 	fmt.Println(i,": ", v)
+	// 	teams, err := cli.GetLoanTeams(v)
+	// 	for _, w := range teams {
+	// 		fmt.Println("team: ", w)
+	// 	}
+
+	// 	lenders, err := cli.GetLoanLenders(v)
+	// 	if err != nil {
+	// 		log.Fatal(err)
+	// 		break
+	// 	}
+
+	// 	for _, w := range lenders {
+	// 		fmt.Println("lender: ", w)
+	// 	}
+		
+	// 	similar, err := cli.GetSimilarLoans(v)
+	// 	if err != nil {
+	// 		log.Fatal(err)
+	// 		break
+	// 	}
+	// 	for _, w := range similar {
+	// 		fmt.Println("similar: ", w)
+	// 	}
 	// }
+
+	newLoans, err := cli.GetNewestLoans(25)
+
+	if err != nil {
+		log.Fatal(err)
+
+	}
+
+	fmt.Println("printing new loans.....")
+
+	for i, v := range newLoans {
+		fmt.Println(i,": ", v)
+	}
 
 }
