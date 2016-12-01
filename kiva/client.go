@@ -29,6 +29,7 @@ import (
 	"path"
 	//"reflect"
 	"strconv"
+	"sync"
 	"time"
 )
 
@@ -150,6 +151,7 @@ type Client struct {
 	baseURL *url.URL
 	doer    doer
 	appID   string
+	mtx 	sync.Mutex
 }
 
 type Config struct {
@@ -231,26 +233,27 @@ type ChannelResult struct {
     Err error
 }
 
-// wraps "do" to handle paged requests
+// thread-safe "do" to handle paged requests
 func (c *Client) doPaged(urlpath string, query url.Values, pr Pageable, numPages int) ([]Pageable, error) {
+	
+	newQuery := url.Values{}
+	if c.appID != "" {
+		if query == nil {
+			query = newQuery
+		}
+		query.Set("app_id", c.appID)
+	}
 
-	/* algerrithm:
-	verify numpages is a sane number -- not < 0
-	get first page
-	// example of initial response if no pages:
-	//	{"paging":{"page":1,"total":0,"page_size":50,"pages":0},"lenders":[]}
-	if numPages == 1 or total <= 1, return response
-	set numPages to lesser of numPages and total
-	iterate while i < numPages and return response array
-	*/
+	resp, err := c.raw(method, urlpath, query, nil)
+	if err != nil {
+		return nil, fmt.Errorf("error making request: %s", err)
+	}
+
+
 	resp := make([]Pageable, 1)
 
 	if numPages < 0 {
 		return nil, fmt.Errorf("less than zero is unacceptable")
-	}
-
-	if query == nil {
-		query = url.Values{}
 	}
 
 	// get the first page
@@ -271,13 +274,14 @@ func (c *Client) doPaged(urlpath string, query url.Values, pr Pageable, numPages
 		numPages = paging.Pages
 	}
 
-	respArr := make([]Pageable, numPages)
+	respArr := make([]Pageable, 1)
 	copy(respArr, resp)
 	ch := make(chan ChannelResult)
 
 	for i := 2; i <= numPages; i++ {
 		go func(i int) error {
 			fmt.Println("i: ", i)
+			query := query
 			query.Set("page", strconv.Itoa(i))
 			err := c.do("GET", urlpath, query, nil, &pr)
 			if err != nil {
@@ -287,6 +291,15 @@ func (c *Client) doPaged(urlpath string, query url.Values, pr Pageable, numPages
 			return nil
 		}(i)
 	}
+
+
+
+	decode := json.NewDecoder(resp.Body)
+	if err = decode.Decode(&v); err != nil {
+		return nil, fmt.Errorf("cannot decode json: %s", err)
+	}
+
+
 
 	for {
 		select {
