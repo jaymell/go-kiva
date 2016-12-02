@@ -24,13 +24,14 @@ import (
 	"errors"
 	"fmt"
 	"io"
+    "log"
 	"net/http"
 	"net/url"
 	"path"
-	//"reflect"
 	"strconv"
-	"sync"
 	"time"
+
+	"github.com/jpillora/backoff"
 )
 
 type Loan struct {
@@ -151,7 +152,7 @@ type Client struct {
 	baseURL *url.URL
 	doer    doer
 	appID   string
-	mtx 	sync.Mutex
+	backoff *backoff.Backoff	
 }
 
 type Config struct {
@@ -181,12 +182,19 @@ func New(config *Config) *Client {
 		panic(fmt.Sprintf("cannot parse base URL: %q (%v)", config.BaseURL, err))
 	}
 
+	b := &backoff.Backoff{
+	    Jitter: true,
+	    Min: 1 * time.Second,
+	    Max: 1 * time.Minute,
+	}
+
 	return &Client{
 		baseURL: baseURL,
 		doer: &http.Client{
 			Timeout: time.Second * 10,
 		},
 		appID: config.AppID,
+		backoff: b,
 	}
 }
 
@@ -197,12 +205,38 @@ func (c *Client) raw(method string, urlpath string, query url.Values, body io.Re
 	urlpath += ".json"
 	url.Path = path.Join(url.Path, urlpath)
 	url.RawQuery = query.Encode()
-	fmt.Println(url.String())
+
 	req, err := http.NewRequest(method, url.String(), body)
 	if err != nil {
 		return nil, err
 	}
-	return c.doer.Do(req)
+
+	// this will retry forever if hit rate limit; 
+	// for now, leaving it up to caller to
+	// decide when to give up on a request:	
+	var resp *http.Response
+	for {
+		resp, err = c.doer.Do(req)
+		if err != nil {
+			return nil, err
+		}
+
+		if resp.Status == "403 Forbidden (Rate Limit Exceeded)" {
+			d := c.backoff.Duration()
+			log.Println("Rate throttled. Backing off: ", d)
+			time.Sleep(d)
+			continue
+		}
+		c.backoff.Reset()
+		break
+	}
+
+	//fmt.Println("X-RateLimit-Overall-Limit: ", resp.Header.Get("X-RateLimit-Overall-Limit"))
+	//fmt.Println("X-RateLimit-Overall-Remaining: ", resp.Header.Get("X-RateLimit-Overall-Remaining"))
+	//fmt.Println("X-RateLimit-Specific-Limit: ", resp.Header.Get("X-RateLimit-Specific-Limit"))
+	//fmt.Println("X-RateLimit-Specific-Remaining: ", resp.Header.Get("X-RateLimit-Specific-Remaining"))
+
+	return resp, err	
 }
 
 // decode json from http response and return as interface understood
@@ -283,7 +317,6 @@ func (c *Client) doPaged(urlpath string, query url.Values, pr Pageable, numPages
 	ch := make(chan ChannelResult)
 	for i := 2; i <= numPages; i++ {
 		go func(i int) {
-			fmt.Println("i: ", i)
 			q := url.Values{}
 			for k,v := range query {
   				q[k] = v
@@ -305,7 +338,6 @@ func (c *Client) doPaged(urlpath string, query url.Values, pr Pageable, numPages
 					return nil, err
 				}
 				rawArr = append(rawArr, r.Val)
-				fmt.Println("THIS: ", rawArr[len(rawArr)-1])
 
 		}
 		if len(rawArr) == numPages-1 { 
@@ -315,7 +347,6 @@ func (c *Client) doPaged(urlpath string, query url.Values, pr Pageable, numPages
 
 	respArr := make([]Pageable, 1)
 	copy(respArr, resp)
-	fmt.Println("THIS: ", rawArr[0])
 	for _, val := range rawArr {
 		decode := json.NewDecoder(val.Body)
 		if err = decode.Decode(&pr); err != nil {

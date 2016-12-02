@@ -63,7 +63,7 @@ func main() {
 	// 	}
 	// }
 
-	newLoans, err := cli.GetNewestLoans(25)
+	newLoans, err := cli.GetNewestLoans(500)
 
 	if err != nil {
 		log.Fatal(err)
